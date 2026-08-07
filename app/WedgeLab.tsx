@@ -35,6 +35,7 @@ export default function WedgeLab() {
   const [referenceFrame, setReferenceFrame] =
     useState<ReferenceFrame>("ground");
   const lastFrame = useRef<number | null>(null);
+  const timeRef = useRef(0);
 
   const physics = useMemo(() => {
     return createWedgeSystem({
@@ -63,12 +64,9 @@ export default function WedgeLab() {
   const resetMotion = useCallback(() => {
     setRunning(false);
     setTime(0);
+    timeRef.current = 0;
     lastFrame.current = null;
   }, []);
-
-  useEffect(() => {
-    resetMotion();
-  }, [wedgeMass, blockMass, angle, gravity, resetMotion]);
 
   useEffect(() => {
     if (!running) {
@@ -81,21 +79,21 @@ export default function WedgeLab() {
       if (lastFrame.current === null) lastFrame.current = now;
       const delta = Math.min((now - lastFrame.current) / 1000, 0.04);
       lastFrame.current = now;
-      setTime((current) =>
-        Math.min(
-          physics.endTime,
-          current + delta * SPEEDS[speedIndex],
-        ),
+      const nextTime = Math.min(
+        physics.endTime,
+        timeRef.current + delta * SPEEDS[speedIndex],
       );
+      timeRef.current = nextTime;
+      setTime(nextTime);
+      if (nextTime >= physics.endTime) {
+        setRunning(false);
+        return;
+      }
       frameId = requestAnimationFrame(animate);
     };
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
   }, [physics.endTime, running, speedIndex]);
-
-  useEffect(() => {
-    if (ended) setRunning(false);
-  }, [ended]);
 
   const choosePrediction = (choice: Exclude<Prediction, null>) => {
     setPrediction(choice);
@@ -105,14 +103,18 @@ export default function WedgeLab() {
 
   const step = (direction: 1 | -1) => {
     setRunning(false);
-    setTime((current) =>
-      Math.min(physics.endTime, Math.max(0, current + direction * 0.08)),
+    const nextTime = Math.min(
+      physics.endTime,
+      Math.max(0, timeRef.current + direction * 0.08),
     );
+    timeRef.current = nextTime;
+    setTime(nextTime);
   };
 
   const replay = () => {
     if (!submitted) return;
     if (ended) {
+      timeRef.current = 0;
       setTime(0);
       setRunning(true);
       return;
@@ -487,7 +489,10 @@ export default function WedgeLab() {
               max={12}
               step={0.5}
               unit="kg"
-              onChange={setWedgeMass}
+              onChange={(value) => {
+                resetMotion();
+                setWedgeMass(value);
+              }}
             />
             <RangeControl
               label="Block mass"
@@ -497,7 +502,10 @@ export default function WedgeLab() {
               max={6}
               step={0.5}
               unit="kg"
-              onChange={setBlockMass}
+              onChange={(value) => {
+                resetMotion();
+                setBlockMass(value);
+              }}
             />
             <RangeControl
               label="Incline angle"
@@ -507,7 +515,10 @@ export default function WedgeLab() {
               max={60}
               step={1}
               unit="°"
-              onChange={setAngle}
+              onChange={(value) => {
+                resetMotion();
+                setAngle(value);
+              }}
             />
             <RangeControl
               label="Gravity"
@@ -517,7 +528,10 @@ export default function WedgeLab() {
               max={12}
               step={0.1}
               unit="m/s²"
-              onChange={setGravity}
+              onChange={(value) => {
+                resetMotion();
+                setGravity(value);
+              }}
             />
 
             <div className="overlay-controls">
