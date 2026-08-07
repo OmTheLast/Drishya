@@ -270,6 +270,8 @@ p {
 }
 
 .stage {
+  --ground-y: 327px;
+  --world-origin-x: clamp(58px, 11vw, 125px);
   position: relative;
   height: 405px;
   overflow: hidden;
@@ -300,11 +302,21 @@ p {
   font-size: 10px;
 }
 
+.conservation-label > i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(45, 156, 112, 0.12);
+}
+
 .ground-line {
   position: absolute;
   left: 0;
   right: 0;
-  top: 327px;
+  top: var(--ground-y);
   height: 2px;
   background: var(--ink);
 }
@@ -331,25 +343,22 @@ p {
   color: #7c8589;
 }
 
-.wedge-system {
+.world-layer {
   position: absolute;
-  left: clamp(6%, 13vw, 20%);
-  top: 80px;
-  width: 450px;
-  height: 260px;
-  transition: transform 40ms linear;
+  inset: 0;
 }
 
 .wedge {
   position: absolute;
-  left: 44px;
-  top: 22px;
-  width: 350px;
-  height: 225px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 45%),
     var(--navy-2);
   clip-path: polygon(0 0, 100% 100%, 0 100%);
+  transition:
+    left 40ms linear,
+    width 180ms ease,
+    height 180ms ease,
+    top 180ms ease;
 }
 
 .wedge::after {
@@ -367,9 +376,6 @@ p {
 
 .wedge-shadow {
   position: absolute;
-  left: 33px;
-  top: 238px;
-  width: 375px;
   height: 12px;
   background: rgba(11, 31, 48, 0.17);
   filter: blur(7px);
@@ -389,8 +395,8 @@ p {
 .angle-label {
   position: absolute;
   z-index: 1;
-  left: 58px;
-  top: 107px;
+  left: 18px;
+  bottom: 13px;
   color: rgba(255, 255, 255, 0.8);
   font-family: var(--font-geist-mono), monospace;
   font-size: 10px;
@@ -399,8 +405,6 @@ p {
 .block {
   position: absolute;
   z-index: 4;
-  width: 58px;
-  height: 48px;
   display: grid;
   place-items: center;
   color: var(--navy);
@@ -408,6 +412,9 @@ p {
   background: var(--orange);
   box-shadow: 0 8px 14px rgba(11, 31, 48, 0.18);
   transform-origin: center center;
+  transition:
+    width 180ms ease,
+    height 180ms ease;
 }
 
 .block > span {
@@ -434,7 +441,7 @@ p {
   z-index: 3;
   width: 8px;
   height: 8px;
-  margin: 18px 0 0 21px;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: var(--orange);
 }
@@ -467,6 +474,7 @@ p {
   font-family: var(--font-geist-mono), monospace;
   font-size: 10px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .vector-weight {
@@ -494,13 +502,44 @@ p {
 
 .wedge-motion {
   position: absolute;
-  left: 24px;
-  top: 270px;
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--orange);
   transition: opacity 200ms ease;
+}
+
+.event-marker {
+  position: absolute;
+  z-index: 8;
+  right: 22px;
+  bottom: 90px;
+  width: min(330px, calc(100% - 44px));
+  display: grid;
+  gap: 4px;
+  padding: 13px 15px;
+  border-left: 3px solid var(--orange);
+  background: rgba(7, 25, 39, 0.94);
+  color: var(--white);
+  box-shadow: 0 12px 30px rgba(7, 25, 39, 0.2);
+}
+
+.event-marker > span {
+  color: var(--orange);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.event-marker strong {
+  font-size: 11px;
+}
+
+.event-marker small {
+  color: #aebbc3;
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .wedge-motion i {
@@ -1200,10 +1239,6 @@ footer {
     border-bottom: 0;
   }
 
-  .wedge-system {
-    left: 17%;
-  }
-
   .measurement strong {
     font-size: 14px;
   }
@@ -1237,7 +1272,9 @@ footer {
   }
 
   .stage {
-    height: 330px;
+    --ground-y: 310px;
+    --world-origin-x: 40px;
+    height: 370px;
   }
 
   .stage-toolbar {
@@ -1252,20 +1289,14 @@ footer {
     display: none;
   }
 
-  .wedge-system {
-    left: -15px;
-    top: 35px;
-    transform-origin: left bottom;
-    scale: 0.8;
-  }
-
-  .ground-line {
-    top: 281px;
-  }
-
   .conservation-label {
     top: 16px;
     right: 12px;
+  }
+
+  .event-marker {
+    right: 12px;
+    bottom: 72px;
   }
 
   .playback {

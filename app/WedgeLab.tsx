@@ -1,13 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  conservationResiduals,
+  createWedgeSystem,
+  stateAt,
+} from "../lib/wedgePhysics.mjs";
 
 type Prediction = "left" | "right" | null;
 type InsightTab = "intuition" | "equations" | "challenge";
+type ReferenceFrame = "ground" | "wedge";
 
 const SPEEDS = [0.25, 0.5, 1];
-const MAX_SLIDE = 4.6;
-const PX_PER_METER = 42;
+const PX_PER_METER = 43;
 
 function format(value: number, decimals = 2) {
   return Number.isFinite(value) ? value.toFixed(decimals) : "—";
@@ -27,42 +32,33 @@ export default function WedgeLab() {
   const [showVelocity, setShowVelocity] = useState(false);
   const [showTrail, setShowTrail] = useState(true);
   const [activeTab, setActiveTab] = useState<InsightTab>("intuition");
+  const [referenceFrame, setReferenceFrame] =
+    useState<ReferenceFrame>("ground");
   const lastFrame = useRef<number | null>(null);
 
   const physics = useMemo(() => {
-    const theta = (angle * Math.PI) / 180;
-    const sin = Math.sin(theta);
-    const cos = Math.cos(theta);
-    const denominator = wedgeMass + blockMass * sin * sin;
-    const relativeAcceleration =
-      (gravity * sin * (wedgeMass + blockMass)) / denominator;
-    const wedgeAcceleration =
-      (-blockMass * gravity * sin * cos) / denominator;
-    const blockAx = (wedgeMass * gravity * sin * cos) / denominator;
-    const blockAy =
-      (-gravity * (wedgeMass + blockMass) * sin * sin) / denominator;
-    const normal =
-      (blockMass * gravity * wedgeMass * cos) / denominator;
-
-    return {
-      theta,
-      sin,
-      cos,
-      relativeAcceleration,
-      wedgeAcceleration,
-      blockAx,
-      blockAy,
-      normal,
-    };
+    return createWedgeSystem({
+      wedgeMass,
+      blockMass,
+      angleDeg: angle,
+      gravity,
+    });
   }, [angle, blockMass, gravity, wedgeMass]);
 
-  const slide = Math.min(
-    MAX_SLIDE,
-    0.5 * physics.relativeAcceleration * time * time,
+  const world = useMemo(() => stateAt(physics, time), [physics, time]);
+  const residuals = useMemo(
+    () => conservationResiduals(physics, world),
+    [physics, world],
   );
-  const wedgeX = 0.5 * physics.wedgeAcceleration * time * time;
-  const relativeVelocity = physics.relativeAcceleration * time;
-  const ended = slide >= MAX_SLIDE;
+  const ended = world.atFoot;
+  const renderedWedgeX = referenceFrame === "ground" ? world.wedge.x : 0;
+  const renderedBlockX =
+    referenceFrame === "ground"
+      ? world.block.x
+      : world.block.x - world.wedge.x;
+  const blockPixels = physics.blockSize * PX_PER_METER;
+  const weightArrow = Math.max(20, blockMass * gravity * 1.45);
+  const normalArrow = Math.max(20, physics.normalForce * 1.45);
 
   const resetMotion = useCallback(() => {
     setRunning(false);
@@ -85,12 +81,17 @@ export default function WedgeLab() {
       if (lastFrame.current === null) lastFrame.current = now;
       const delta = Math.min((now - lastFrame.current) / 1000, 0.04);
       lastFrame.current = now;
-      setTime((current) => current + delta * SPEEDS[speedIndex]);
+      setTime((current) =>
+        Math.min(
+          physics.endTime,
+          current + delta * SPEEDS[speedIndex],
+        ),
+      );
       frameId = requestAnimationFrame(animate);
     };
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
-  }, [running, speedIndex]);
+  }, [physics.endTime, running, speedIndex]);
 
   useEffect(() => {
     if (ended) setRunning(false);
@@ -104,12 +105,18 @@ export default function WedgeLab() {
 
   const step = (direction: 1 | -1) => {
     setRunning(false);
-    setTime((current) => Math.max(0, current + direction * 0.08));
+    setTime((current) =>
+      Math.min(physics.endTime, Math.max(0, current + direction * 0.08)),
+    );
   };
 
   const replay = () => {
     if (!submitted) return;
-    if (ended) setTime(0);
+    if (ended) {
+      setTime(0);
+      setRunning(true);
+      return;
+    }
     setRunning((current) => !current);
   };
 
@@ -119,13 +126,14 @@ export default function WedgeLab() {
 
   const trailDots = Array.from({ length: 7 }, (_, index) => {
     const trailTime = Math.max(0, time - (index + 1) * 0.1);
-    const trailSlide = Math.min(
-      MAX_SLIDE,
-      0.5 * physics.relativeAcceleration * trailTime * trailTime,
-    );
+    const trailState = stateAt(physics, trailTime);
+    const trailX =
+      referenceFrame === "ground"
+        ? trailState.block.x
+        : trailState.block.x - trailState.wedge.x;
     return {
-      left: 65 + trailSlide * physics.cos * PX_PER_METER,
-      top: 35 + trailSlide * physics.sin * PX_PER_METER,
+      x: trailX,
+      y: trailState.block.y,
       opacity: Math.max(0.08, 0.55 - index * 0.07),
     };
   });
@@ -177,12 +185,28 @@ export default function WedgeLab() {
             <div className="stage-toolbar">
               <div className="status-cluster">
                 <span className={`status-dot ${running ? "live" : ""}`} />
-                <span>{running ? "SIMULATING" : ended ? "COMPLETE" : "READY"}</span>
-                <span className="time-readout">t = {format(time)} s</span>
+                <span>
+                  {running
+                    ? "SIMULATING"
+                    : ended
+                      ? "AT WEDGE FOOT"
+                      : "READY"}
+                </span>
+                <span className="time-readout">t = {format(world.time)} s</span>
               </div>
               <div className="frame-switch">
-                <button className="active">GROUND FRAME</button>
-                <button disabled title="Coming in the next lab iteration">
+                <button
+                  className={referenceFrame === "ground" ? "active" : ""}
+                  aria-pressed={referenceFrame === "ground"}
+                  onClick={() => setReferenceFrame("ground")}
+                >
+                  GROUND FRAME
+                </button>
+                <button
+                  className={referenceFrame === "wedge" ? "active" : ""}
+                  aria-pressed={referenceFrame === "wedge"}
+                  onClick={() => setReferenceFrame("wedge")}
+                >
                   WEDGE FRAME
                 </button>
               </div>
@@ -190,21 +214,34 @@ export default function WedgeLab() {
 
             <div className={`stage ${!submitted ? "stage-locked" : ""}`}>
               <div className="stage-grid" />
-              <div className="conservation-label">
-                ΣF<sub>x, external</sub> = 0
+              <div
+                className="conservation-label"
+                title={`Momentum residual: ${residuals.horizontalMomentum.toExponential(2)} kg·m/s; energy residual: ${residuals.mechanicalEnergy.toExponential(2)} J`}
+              >
+                <i /> P<sub>x</sub> conserved · E conserved
               </div>
               <div className="ground-line">
                 <span>FRICTIONLESS GROUND</span>
               </div>
 
-              <div
-                className="wedge-system"
-                style={{
-                  transform: `translateX(${wedgeX * PX_PER_METER}px)`,
-                }}
-              >
-                <div className="wedge-shadow" />
-                <div className="wedge">
+              <div className="world-layer">
+                <div
+                  className="wedge-shadow"
+                  style={{
+                    left: `calc(var(--world-origin-x) + ${renderedWedgeX * PX_PER_METER}px)`,
+                    top: "calc(var(--ground-y) - 5px)",
+                    width: physics.base * PX_PER_METER,
+                  }}
+                />
+                <div
+                  className="wedge"
+                  style={{
+                    left: `calc(var(--world-origin-x) + ${renderedWedgeX * PX_PER_METER}px)`,
+                    top: `calc(var(--ground-y) - ${physics.height * PX_PER_METER}px)`,
+                    width: physics.base * PX_PER_METER,
+                    height: physics.height * PX_PER_METER,
+                  }}
+                >
                   <span className="mass-label">
                     M = {format(wedgeMass, 1)} kg
                   </span>
@@ -218,8 +255,8 @@ export default function WedgeLab() {
                       className="trail-dot"
                       key={index}
                       style={{
-                        left: dot.left,
-                        top: dot.top,
+                        left: `calc(var(--world-origin-x) + ${dot.x * PX_PER_METER}px)`,
+                        top: `calc(var(--ground-y) - ${dot.y * PX_PER_METER}px)`,
                         opacity: dot.opacity,
                       }}
                     />
@@ -228,8 +265,10 @@ export default function WedgeLab() {
                 <div
                   className="block"
                   style={{
-                    left: 48 + slide * physics.cos * PX_PER_METER,
-                    top: 12 + slide * physics.sin * PX_PER_METER,
+                    left: `calc(var(--world-origin-x) + ${renderedBlockX * PX_PER_METER - blockPixels / 2}px)`,
+                    top: `calc(var(--ground-y) - ${world.block.y * PX_PER_METER + blockPixels / 2}px)`,
+                    width: blockPixels,
+                    height: blockPixels,
                     transform: `rotate(${angle}deg)`,
                   }}
                 >
@@ -239,20 +278,34 @@ export default function WedgeLab() {
                     <>
                       <i
                         className="vector vector-weight"
-                        style={{ transform: `rotate(${90 - angle}deg)` }}
+                        style={{
+                          width: weightArrow,
+                          transform: `rotate(${90 - angle}deg)`,
+                        }}
                       >
-                        <b>mg</b>
+                        <b>mg · {format(blockMass * gravity, 1)} N</b>
                       </i>
                       <i
                         className="vector vector-normal"
-                        style={{ transform: `rotate(${-90}deg)` }}
+                        style={{
+                          width: normalArrow,
+                          transform: "rotate(-90deg)",
+                        }}
                       >
-                        <b>N</b>
+                        <b>N · {format(physics.normalForce, 1)} N</b>
                       </i>
                     </>
                   )}
                   {showVelocity && time > 0.04 && (
-                    <i className="vector vector-velocity">
+                    <i
+                      className="vector vector-velocity"
+                      style={{
+                        width: Math.max(
+                          22,
+                          Math.min(105, world.block.relativeSpeed * 11),
+                        ),
+                      }}
+                    >
                       <b>v<sub>rel</sub></b>
                     </i>
                   )}
@@ -260,12 +313,27 @@ export default function WedgeLab() {
 
                 <div
                   className="wedge-motion"
-                  style={{ opacity: time > 0.05 ? 1 : 0.2 }}
+                  style={{
+                    left: `calc(var(--world-origin-x) + ${renderedWedgeX * PX_PER_METER}px)`,
+                    top: "calc(var(--ground-y) + 25px)",
+                    opacity: time > 0.05 ? 1 : 0.2,
+                  }}
                 >
                   <i />
                   <span>a<sub>w</sub></span>
                 </div>
               </div>
+
+              {ended && submitted && (
+                <div className="event-marker" role="status">
+                  <span>DOMAIN BOUNDARY</span>
+                  <strong>Block reached the wedge foot at {format(physics.endTime)} s</strong>
+                  <small>
+                    Replay, step backward, or change a parameter. Ground impact is
+                    a separate contact event and is not assumed here.
+                  </small>
+                </div>
+              )}
 
               {!submitted && (
                 <div className="stage-lock">
@@ -307,7 +375,7 @@ export default function WedgeLab() {
 
               <div className="timeline">
                 <div className="timeline-track">
-                  <i style={{ width: `${(slide / MAX_SLIDE) * 100}%` }} />
+                  <i style={{ width: `${world.progress * 100}%` }} />
                 </div>
               </div>
 
@@ -332,14 +400,20 @@ export default function WedgeLab() {
             />
             <Measurement
               label="NORMAL REACTION"
-              value={`${format(physics.normal)} N`}
-              note={`${format((physics.normal / (blockMass * gravity)) * 100, 0)}% of mg`}
+              value={`${format(physics.normalForce)} N`}
+              note={`${format((physics.normalForce / (blockMass * gravity)) * 100, 0)}% of mg`}
               tone="green"
             />
             <Measurement
               label="RELATIVE SPEED"
-              value={`${format(relativeVelocity)} m/s`}
-              note={time === 0 ? "at release" : `at ${format(time)} s`}
+              value={`${format(world.block.relativeSpeed)} m/s`}
+              note={
+                ended
+                  ? "at wedge foot"
+                  : time === 0
+                    ? "at release"
+                    : `at ${format(time)} s`
+              }
               tone="violet"
             />
           </div>
