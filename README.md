@@ -3,6 +3,8 @@
 An interactive mechanics laboratory for building the physical intuition needed
 for difficult JEE Main and Advanced problems.
 
+**Live simulation:** [ompatnaik.com/Drishya](https://ompatnaik.com/Drishya/)
+
 The first lab models a block sliding on a freely moving frictionless wedge. A
 student predicts the motion, runs the simulation, switches reference frames,
 changes physical parameters, inspects vectors, and connects the observed motion
@@ -18,6 +20,12 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+## Deployment
+
+Every push to `main` builds and deploys the static application to GitHub Pages.
+The deployment workflow also runs the physics tests and lint checks before
+publishing.
 
 ## Validation
 

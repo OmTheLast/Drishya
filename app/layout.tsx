@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
@@ -12,8 +14,8 @@ export const metadata: Metadata = {
   description:
     "Interactive mechanics laboratories for building JEE-level physical intuition.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: `${basePath}/favicon.svg`,
+    shortcut: `${basePath}/favicon.svg`,
   },
   openGraph: {
     type: "website",
@@ -21,7 +23,7 @@ export const metadata: Metadata = {
     description: "Predict, observe, and explain a classic JEE mechanics system.",
     images: [
       {
-        url: "/og.png",
+        url: `${basePath}/og.png`,
         width: 1200,
         height: 630,
         alt: "Drishya movable wedge mechanics laboratory",
@@ -32,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Drishya · The Runaway Wedge",
     description: "Predict, observe, and explain a classic JEE mechanics system.",
-    images: ["/og.png"],
+    images: [`${basePath}/og.png`],
   },
 };
 
