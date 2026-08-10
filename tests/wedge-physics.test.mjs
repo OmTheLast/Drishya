@@ -45,3 +45,42 @@ test("approaches the fixed-incline result for a heavy wedge", () => {
   assert.ok(Math.abs(system.relativeAcceleration - expected) < 1e-10);
   assert.ok(Math.abs(system.wedgeAcceleration) < 1e-10);
 });
+
+test("accounts for work done by kinetic friction", () => {
+  const system = createWedgeSystem({
+    wedgeMass: 5,
+    blockMass: 2,
+    angleDeg: 30,
+    gravity: 9.8,
+    frictionCoefficient: 0.2,
+  });
+  assert.equal(system.regime, "sliding-with-friction");
+  assert.ok(system.relativeAcceleration > 0);
+  assert.ok(
+    system.relativeAcceleration <
+      createWedgeSystem(parameters[0]).relativeAcceleration,
+  );
+  const state = stateAt(system, system.endTime * 0.75);
+  const residuals = conservationResiduals(system, state);
+  assert.ok(state.dissipatedEnergy > 0);
+  assert.ok(Math.abs(residuals.horizontalMomentum) < 1e-10);
+  assert.ok(Math.abs(residuals.mechanicalEnergy) < 1e-9);
+  assert.ok(Math.abs(residuals.contactNormal) < 1e-10);
+});
+
+test("holds the block when friction exceeds tan(theta)", () => {
+  const system = createWedgeSystem({
+    wedgeMass: 5,
+    blockMass: 2,
+    angleDeg: 30,
+    gravity: 9.8,
+    frictionCoefficient: 0.7,
+  });
+  const state = stateAt(system, 10);
+  assert.equal(system.regime, "static");
+  assert.equal(system.relativeAcceleration, 0);
+  assert.equal(system.wedgeAcceleration, 0);
+  assert.equal(state.time, 0);
+  assert.equal(state.displacement, 0);
+  assert.equal(state.atFoot, false);
+});

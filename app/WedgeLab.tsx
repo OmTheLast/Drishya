@@ -10,6 +10,7 @@ import {
 type Prediction = "left" | "right" | null;
 type InsightTab = "intuition" | "equations" | "challenge";
 type ReferenceFrame = "ground" | "wedge";
+type GuideStep = 0 | 1 | 2;
 
 const SPEEDS = [0.25, 0.5, 1];
 const PX_PER_METER = 43;
@@ -34,6 +35,10 @@ export default function WedgeLab() {
   const [activeTab, setActiveTab] = useState<InsightTab>("intuition");
   const [referenceFrame, setReferenceFrame] =
     useState<ReferenceFrame>("ground");
+  const [frictionEnabled, setFrictionEnabled] = useState(false);
+  const [frictionCoefficient, setFrictionCoefficient] = useState(0.2);
+  const [showGuide, setShowGuide] = useState(true);
+  const [guideStep, setGuideStep] = useState<GuideStep>(0);
   const lastFrame = useRef<number | null>(null);
   const timeRef = useRef(0);
 
@@ -43,8 +48,9 @@ export default function WedgeLab() {
       blockMass,
       angleDeg: angle,
       gravity,
+      frictionCoefficient: frictionEnabled ? frictionCoefficient : 0,
     });
-  }, [angle, blockMass, gravity, wedgeMass]);
+  }, [angle, blockMass, frictionCoefficient, frictionEnabled, gravity, wedgeMass]);
 
   const world = useMemo(() => stateAt(physics, time), [physics, time]);
   const residuals = useMemo(
@@ -60,6 +66,22 @@ export default function WedgeLab() {
   const blockPixels = physics.blockSize * PX_PER_METER;
   const weightArrow = Math.max(20, blockMass * gravity * 1.45);
   const normalArrow = Math.max(20, physics.normalForce * 1.45);
+  const frictionArrow = Math.max(18, physics.frictionForce * 1.45);
+  const blockSpeed = Math.hypot(world.block.vx, world.block.vy);
+  const blockAccelerationMagnitude = Math.hypot(
+    physics.blockAcceleration.x,
+    physics.blockAcceleration.y,
+  );
+  const initialWorld = useMemo(() => stateAt(physics, 0), [physics]);
+  const centreOfMassX =
+    (wedgeMass * (world.wedge.x + physics.base / 3) +
+      blockMass * world.block.x) /
+    (wedgeMass + blockMass);
+  const initialCentreOfMassX =
+    (wedgeMass * (initialWorld.wedge.x + physics.base / 3) +
+      blockMass * initialWorld.block.x) /
+    (wedgeMass + blockMass);
+  const centreOfMassShift = centreOfMassX - initialCentreOfMassX;
 
   const resetMotion = useCallback(() => {
     setRunning(false);
@@ -112,7 +134,7 @@ export default function WedgeLab() {
   };
 
   const replay = () => {
-    if (!submitted) return;
+    if (!submitted || physics.isStatic) return;
     if (ended) {
       timeRef.current = 0;
       setTime(0);
@@ -175,11 +197,13 @@ export default function WedgeLab() {
           <div className="section-heading">
             <div>
               <span className="eyebrow">THE SETUP</span>
-              <h1>A block. A wedge. No friction.</h1>
+              <h1>
+                A block. A wedge. {frictionEnabled ? "With friction." : "No friction."}
+              </h1>
             </div>
             <p>
               Release the block from rest. The ground exerts no horizontal
-              force on the system.
+              force on the system; friction acts only at the block–wedge contact.
             </p>
           </div>
 
@@ -190,27 +214,38 @@ export default function WedgeLab() {
                 <span>
                   {running
                     ? "SIMULATING"
-                    : ended
-                      ? "AT WEDGE FOOT"
-                      : "READY"}
+                    : physics.isStatic
+                      ? "STATIC EQUILIBRIUM"
+                      : ended
+                        ? "AT WEDGE FOOT"
+                        : "READY"}
                 </span>
                 <span className="time-readout">t = {format(world.time)} s</span>
               </div>
-              <div className="frame-switch">
+              <div className="stage-actions">
                 <button
-                  className={referenceFrame === "ground" ? "active" : ""}
-                  aria-pressed={referenceFrame === "ground"}
-                  onClick={() => setReferenceFrame("ground")}
+                  className={`guide-toggle ${showGuide ? "active" : ""}`}
+                  aria-pressed={showGuide}
+                  onClick={() => setShowGuide((value) => !value)}
                 >
-                  GROUND FRAME
+                  {showGuide ? "GUIDE ON" : "GUIDE OFF"}
                 </button>
-                <button
-                  className={referenceFrame === "wedge" ? "active" : ""}
-                  aria-pressed={referenceFrame === "wedge"}
-                  onClick={() => setReferenceFrame("wedge")}
-                >
-                  WEDGE FRAME
-                </button>
+                <div className="frame-switch">
+                  <button
+                    className={referenceFrame === "ground" ? "active" : ""}
+                    aria-pressed={referenceFrame === "ground"}
+                    onClick={() => setReferenceFrame("ground")}
+                  >
+                    GROUND FRAME
+                  </button>
+                  <button
+                    className={referenceFrame === "wedge" ? "active" : ""}
+                    aria-pressed={referenceFrame === "wedge"}
+                    onClick={() => setReferenceFrame("wedge")}
+                  >
+                    WEDGE FRAME
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -220,7 +255,11 @@ export default function WedgeLab() {
                 className="conservation-label"
                 title={`Momentum residual: ${residuals.horizontalMomentum.toExponential(2)} kg·m/s; energy residual: ${residuals.mechanicalEnergy.toExponential(2)} J`}
               >
-                <i /> P<sub>x</sub> conserved · E conserved
+                <i /> P<sub>x</sub> conserved · {physics.isStatic ? "E unchanged" : frictionEnabled ? "E → heat" : "E conserved"}
+              </div>
+              <div className="inclination-badge">
+                <span>INCLINATION</span>
+                <strong>θ = {angle}°</strong>
               </div>
               <div className="ground-line">
                 <span>FRICTIONLESS GROUND</span>
@@ -296,6 +335,17 @@ export default function WedgeLab() {
                       >
                         <b>N · {format(physics.normalForce, 1)} N</b>
                       </i>
+                      {frictionEnabled && physics.frictionForce > 0 && (
+                        <i
+                          className="vector vector-friction"
+                          style={{
+                            width: frictionArrow,
+                            transform: "rotate(180deg)",
+                          }}
+                        >
+                          <b>f · {format(physics.frictionForce, 1)} N</b>
+                        </i>
+                      )}
                     </>
                   )}
                   {showVelocity && time > 0.04 && (
@@ -326,6 +376,96 @@ export default function WedgeLab() {
                 </div>
               </div>
 
+              {showGuide && submitted && !ended && !physics.isStatic && (
+                <div className="coach-overlay">
+                  <div className="coach-nav" role="tablist" aria-label="Simulation guide">
+                    {(["FORCES", "BLOCK MOTION", "SYSTEM"] as const).map(
+                      (label, index) => (
+                        <button
+                          key={label}
+                          role="tab"
+                          aria-selected={guideStep === index}
+                          className={guideStep === index ? "active" : ""}
+                          onClick={() => setGuideStep(index as GuideStep)}
+                        >
+                          <span>0{index + 1}</span>
+                          {label}
+                        </button>
+                      ),
+                    )}
+                  </div>
+
+                  {guideStep === 0 && (
+                    <div className="coach-body">
+                      <span className="coach-kicker">READ THE FREE-BODY DIAGRAM</span>
+                      <strong>Three forces can act on the block.</strong>
+                      <p>
+                        Weight is vertical. The normal is perpendicular to the
+                        incline. Friction, when enabled, points up the plane and
+                        opposes the block&apos;s relative motion.
+                      </p>
+                      <div className="coach-metrics force-metrics">
+                        <span><i className="metric-orange" />mg {format(blockMass * gravity, 1)} N</span>
+                        <span><i className="metric-blue" />N {format(physics.normalForce, 1)} N</span>
+                        <span><i className="metric-yellow" />f {format(physics.frictionForce, 1)} N</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {guideStep === 1 && (
+                    <div className="coach-body">
+                      <span className="coach-kicker">GROUND-FRAME KINEMATICS</span>
+                      <strong>
+                        {physics.isStatic
+                          ? "Static friction keeps the block and wedge at rest."
+                          : "The block does not accelerate along one straight axis."}
+                      </strong>
+                      <p>
+                        {physics.isStatic
+                          ? "The downslope component of gravity is exactly balanced, so every ground-frame velocity and acceleration remains zero."
+                          : "Its ground motion combines sliding relative to the wedge with the wedge's own leftward translation."}
+                      </p>
+                      <div className="coach-metrics kinematics-grid">
+                        <span>a<sub>x</sub><b>{format(physics.blockAcceleration.x)} m/s²</b></span>
+                        <span>a<sub>y</sub><b>{format(physics.blockAcceleration.y)} m/s²</b></span>
+                        <span>|a|<b>{format(blockAccelerationMagnitude)} m/s²</b></span>
+                        <span>|v|<b>{format(blockSpeed)} m/s</b></span>
+                      </div>
+                    </div>
+                  )}
+
+                  {guideStep === 2 && (
+                    <div className="coach-body">
+                      <span className="coach-kicker">FOLLOW THE WHOLE SYSTEM</span>
+                      <strong>
+                        {physics.isStatic
+                          ? "No body moves, so the centre of mass stays fixed."
+                          : "The block moves right, so the wedge must answer left."}
+                      </strong>
+                      <p>
+                        With no external horizontal force, total horizontal
+                        momentum stays zero and the centre of mass cannot drift.
+                      </p>
+                      <div className="coach-metrics system-metrics">
+                        <span>p<sub>x,total</sub><b>{format(world.horizontalMomentum, 5)} kg·m/s</b></span>
+                        <span>Δx<sub>COM</sub><b>{format(centreOfMassShift, 5)} m</b></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {physics.isStatic && submitted && (
+                <div className="event-marker static-marker" role="status">
+                  <span>STATIC FRICTION HOLDS</span>
+                  <strong>μ = {format(physics.frictionCoefficient, 2)} ≥ tan θ = {format(physics.staticThreshold, 2)}</strong>
+                  <small>
+                    The required friction is available, so neither the block nor
+                    the wedge accelerates. Lower μ or increase θ to release it.
+                  </small>
+                </div>
+              )}
+
               {ended && submitted && (
                 <div className="event-marker" role="status">
                   <span>DOMAIN BOUNDARY</span>
@@ -351,7 +491,7 @@ export default function WedgeLab() {
                 <button
                   aria-label="Step backward"
                   onClick={() => step(-1)}
-                  disabled={!submitted || time === 0}
+                  disabled={!submitted || physics.isStatic || time === 0}
                 >
                   −▮
                 </button>
@@ -359,14 +499,14 @@ export default function WedgeLab() {
                   className="play-button"
                   aria-label={running ? "Pause simulation" : "Play simulation"}
                   onClick={replay}
-                  disabled={!submitted}
+                  disabled={!submitted || physics.isStatic}
                 >
                   {running ? "Ⅱ" : "▶"}
                 </button>
                 <button
                   aria-label="Step forward"
                   onClick={() => step(1)}
-                  disabled={!submitted || ended}
+                  disabled={!submitted || physics.isStatic || ended}
                 >
                   ▮+
                 </button>
@@ -389,26 +529,26 @@ export default function WedgeLab() {
 
           <div className="measurement-strip">
             <Measurement
-              label="WEDGE ACCELERATION"
+              label="WEDGE · aₓ"
               value={`${format(Math.abs(physics.wedgeAcceleration))} m/s²`}
-              note="← left"
+              note={physics.isStatic ? "stationary" : "← left"}
               tone="orange"
             />
             <Measurement
-              label="BLOCK, ALONG WEDGE"
-              value={`${format(physics.relativeAcceleration)} m/s²`}
-              note="down the plane"
+              label="BLOCK · aₓ (GROUND)"
+              value={`${format(physics.blockAcceleration.x)} m/s²`}
+              note={physics.isStatic ? "static" : "→ right"}
               tone="blue"
             />
             <Measurement
-              label="NORMAL REACTION"
-              value={`${format(physics.normalForce)} N`}
-              note={`${format((physics.normalForce / (blockMass * gravity)) * 100, 0)}% of mg`}
+              label="BLOCK · aᵧ (GROUND)"
+              value={`${format(physics.blockAcceleration.y)} m/s²`}
+              note={physics.isStatic ? "static" : "↓ downward"}
               tone="green"
             />
             <Measurement
-              label="RELATIVE SPEED"
-              value={`${format(world.block.relativeSpeed)} m/s`}
+              label="BLOCK · |v| (GROUND)"
+              value={`${format(blockSpeed)} m/s`}
               note={
                 ended
                   ? "at wedge foot"
@@ -417,6 +557,18 @@ export default function WedgeLab() {
                     : `at ${format(time)} s`
               }
               tone="violet"
+            />
+            <Measurement
+              label="BLOCK · a RELATIVE"
+              value={`${format(physics.relativeAcceleration)} m/s²`}
+              note={physics.isStatic ? "friction holds" : "down the plane"}
+              tone="yellow"
+            />
+            <Measurement
+              label="CENTRE OF MASS · Δx"
+              value={`${format(centreOfMassShift, 5)} m`}
+              note="no horizontal drift"
+              tone="teal"
             />
           </div>
         </section>
@@ -458,17 +610,24 @@ export default function WedgeLab() {
             {submitted && (
               <div
                 className={`prediction-feedback ${
-                  prediction === "left" ? "correct" : "rethink"
+                  physics.isStatic
+                    ? "static"
+                    : prediction === "left"
+                      ? "correct"
+                      : "rethink"
                 }`}
               >
                 <strong>
-                  {prediction === "left"
-                    ? "Correct — now prove it."
-                    : "Good hypothesis — watch the centre of mass."}
+                  {physics.isStatic
+                    ? "Static friction changes the outcome."
+                    : prediction === "left"
+                      ? "Correct — now prove it."
+                      : "Good hypothesis — watch the centre of mass."}
                 </strong>
                 <span>
-                  With no external horizontal force, the system&apos;s horizontal
-                  centre of mass cannot accelerate.
+                  {physics.isStatic
+                    ? "At this μ, friction balances gravity along the incline, so neither body accelerates."
+                    : "With no external horizontal force, the system's horizontal centre of mass cannot accelerate."}
                 </span>
               </div>
             )}
@@ -508,7 +667,7 @@ export default function WedgeLab() {
               }}
             />
             <RangeControl
-              label="Incline angle"
+              label="Inclination angle"
               symbol="θ"
               value={angle}
               min={15}
@@ -520,6 +679,45 @@ export default function WedgeLab() {
                 setAngle(value);
               }}
             />
+            <div className="friction-module">
+              <button
+                className={`friction-button ${frictionEnabled ? "active" : ""}`}
+                type="button"
+                aria-pressed={frictionEnabled}
+                onClick={() => {
+                  resetMotion();
+                  setFrictionEnabled((value) => !value);
+                }}
+              >
+                <span className="friction-symbol">μ</span>
+                <span>
+                  <strong>FRICTION {frictionEnabled ? "ON" : "OFF"}</strong>
+                  <small>
+                    {frictionEnabled
+                      ? physics.isStatic
+                        ? "Static friction holds the block"
+                        : "Kinetic friction opposes sliding"
+                      : "Ideal smooth contact"}
+                  </small>
+                </span>
+                <i>{frictionEnabled ? "ON" : "OFF"}</i>
+              </button>
+              {frictionEnabled && (
+                <RangeControl
+                  label="Friction coefficient"
+                  symbol="μ"
+                  value={frictionCoefficient}
+                  min={0.05}
+                  max={0.8}
+                  step={0.05}
+                  unit=""
+                  onChange={(value) => {
+                    resetMotion();
+                    setFrictionCoefficient(value);
+                  }}
+                />
+              )}
+            </div>
             <RangeControl
               label="Gravity"
               symbol="g"
@@ -585,10 +783,9 @@ export default function WedgeLab() {
               <h2>The centre of mass refuses to drift.</h2>
             </div>
             <p>
-              The block gains momentum to the right. Because the ground cannot
-              provide a horizontal impulse, the wedge must gain exactly the
-              opposite momentum. The two motions are not separate stories—they
-              are one constraint.
+              {physics.isStatic
+                ? "Static friction balances the component of gravity along the plane. No momentum develops, and the horizontal centre of mass remains exactly where it began."
+                : "The block gains momentum to the right. Because the ground cannot provide a horizontal impulse, the wedge must gain exactly the opposite momentum. The two motions are not separate stories—they are one constraint."}
             </p>
             <div className="momentum-balance">
               <span>
@@ -618,18 +815,35 @@ export default function WedgeLab() {
               </strong>
             </div>
             <div className="equation-card accent">
-              <span>Acceleration down the wedge</span>
-              <strong>
-                s̈ ={" "}
-                <span className="fraction">
-                  <i>(M + m)g sin θ</i>
-                  <i>M + m sin² θ</i>
-                </span>
-              </strong>
+              <span>
+                {frictionEnabled
+                  ? "Acceleration with friction"
+                  : "Acceleration down the wedge"}
+              </span>
+              {frictionEnabled ? (
+                <strong>
+                  s̈ ={" "}
+                  <span className="fraction">
+                    <i>(M + m)(g sin θ − f/m)</i>
+                    <i>M + m sin² θ</i>
+                  </span>
+                </strong>
+              ) : (
+                <strong>
+                  s̈ ={" "}
+                  <span className="fraction">
+                    <i>(M + m)g sin θ</i>
+                    <i>M + m sin² θ</i>
+                  </span>
+                </strong>
+              )}
             </div>
             <p>
-              Substitute the second equation into the first: Ẍ is negative,
-              so the wedge accelerates left.
+              {frictionEnabled
+                ? physics.isStatic
+                  ? "Because μ ≥ tan θ, static friction can balance mg sin θ. Both accelerations are zero."
+                  : "For sliding contact, f = μN removes mechanical energy while horizontal momentum remains conserved."
+                : "Substitute the second equation into the first: Ẍ is negative, so the wedge accelerates left."}
             </p>
           </div>
         )}

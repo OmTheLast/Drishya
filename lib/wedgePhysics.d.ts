@@ -3,6 +3,7 @@ export interface WedgeInputs {
   blockMass: number;
   angleDeg: number;
   gravity: number;
+  frictionCoefficient?: number;
   inclineLength?: number;
   blockSize?: number;
 }
@@ -11,6 +12,10 @@ export interface WedgeSystem {
   readonly M: number;
   readonly m: number;
   readonly g: number;
+  readonly frictionCoefficient: number;
+  readonly staticThreshold: number;
+  readonly isStatic: boolean;
+  readonly regime: "frictionless" | "sliding-with-friction" | "static";
   readonly angleDeg: number;
   readonly theta: number;
   readonly sin: number;
@@ -28,6 +33,7 @@ export interface WedgeSystem {
   readonly wedgeAcceleration: number;
   readonly blockAcceleration: Readonly<{ x: number; y: number }>;
   readonly normalForce: number;
+  readonly frictionForce: number;
 }
 
 export interface WedgeState {
@@ -47,6 +53,7 @@ export interface WedgeState {
   readonly horizontalMomentum: number;
   readonly kineticEnergy: number;
   readonly potentialEnergy: number;
+  readonly dissipatedEnergy: number;
   readonly totalEnergy: number;
 }
 
