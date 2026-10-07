@@ -20,6 +20,7 @@ jobs:
     env:
       NEXT_PUBLIC_BASE_PATH: /Drishya
       NEXT_PUBLIC_SITE_URL: https://ompatnaik.com
+      NEXT_DEPLOYMENT_ID: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
