@@ -10,7 +10,8 @@ import {
 type Prediction = "left" | "right" | null;
 type InsightTab = "intuition" | "equations" | "challenge";
 type ReferenceFrame = "ground" | "wedge";
-type GuideStep = 0 | 1 | 2;
+type GuideStep = 0 | 1 | 2 | 3;
+type ParameterFocus = "start" | "wedge" | "block" | "angle" | "friction" | "gravity";
 
 const SPEEDS = [0.25, 0.5, 1];
 const PX_PER_METER = 43;
@@ -39,6 +40,7 @@ export default function WedgeLab() {
   const [frictionCoefficient, setFrictionCoefficient] = useState(0.2);
   const [showGuide, setShowGuide] = useState(true);
   const [guideStep, setGuideStep] = useState<GuideStep>(0);
+  const [parameterFocus, setParameterFocus] = useState<ParameterFocus>("start");
   const lastFrame = useRef<number | null>(null);
   const timeRef = useRef(0);
 
@@ -67,11 +69,16 @@ export default function WedgeLab() {
   const weightArrow = Math.max(20, blockMass * gravity * 1.45);
   const normalArrow = Math.max(20, physics.normalForce * 1.45);
   const frictionArrow = Math.max(18, physics.frictionForce * 1.45);
+  const weightParallel = blockMass * gravity * physics.sin;
+  const weightPerpendicular = blockMass * gravity * physics.cos;
+  const parallelArrow = Math.max(20, weightParallel * 1.45);
+  const perpendicularArrow = Math.max(20, weightPerpendicular * 1.45);
+  const maximumFriction = frictionEnabled
+    ? frictionCoefficient * physics.normalForce
+    : 0;
+  const normalDifference = physics.normalForce - weightPerpendicular;
+  const netDownPlaneForce = Math.max(0, weightParallel - physics.frictionForce);
   const blockSpeed = Math.hypot(world.block.vx, world.block.vy);
-  const blockAccelerationMagnitude = Math.hypot(
-    physics.blockAcceleration.x,
-    physics.blockAcceleration.y,
-  );
   const initialWorld = useMemo(() => stateAt(physics, 0), [physics]);
   const centreOfMassX =
     (wedgeMass * (world.wedge.x + physics.base / 3) +
@@ -82,6 +89,57 @@ export default function WedgeLab() {
       blockMass * initialWorld.block.x) /
     (wedgeMass + blockMass);
   const centreOfMassShift = centreOfMassX - initialCentreOfMassX;
+  const adaptiveCue = useMemo(() => {
+    switch (parameterFocus) {
+      case "wedge":
+        return {
+          label: "YOU CHANGED THE WEDGE MASS",
+          text: `At M = ${format(wedgeMass, 1)} kg, the wedge accelerates ${format(Math.abs(physics.wedgeAcceleration))} m/s² left. A heavier wedge approaches the familiar fixed-incline limit.`,
+        };
+      case "block":
+        return {
+          label: "YOU CHANGED THE BLOCK MASS",
+          text: `At m = ${format(blockMass, 1)} kg, the two bodies are still coupled: the block changes the reaction on the wedge, so you cannot analyse it as a block on a fixed plane.`,
+        };
+      case "angle":
+        return {
+          label: "YOU CHANGED THE INCLINATION",
+          text: `At θ = ${angle}°, the downslope pull is ${format(weightParallel, 1)} N and sticking requires μ ≥ tan θ = ${format(physics.staticThreshold, 2)}.`,
+        };
+      case "friction":
+        return {
+          label: frictionEnabled ? "FRICTION IS NOW PART OF THE MODEL" : "CONTACT IS NOW SMOOTH",
+          text: frictionEnabled
+            ? physics.isStatic
+              ? `μ = ${format(frictionCoefficient, 2)} is large enough to prevent relative motion. Static friction supplies only ${format(physics.frictionForce, 1)} N—the amount required.`
+              : `Friction removes ${format(physics.frictionForce, 1)} N from the downslope drive. Horizontal momentum is still conserved because friction is internal to the chosen system.`
+            : "With f = 0, gravity's downslope component is unopposed. Mechanical energy and horizontal momentum are both conserved.",
+        };
+      case "gravity":
+        return {
+          label: "YOU CHANGED GRAVITY",
+          text: `At g = ${format(gravity, 1)} m/s², every gravitational force and acceleration rescales, but the sticking test μ ≥ tan θ does not change.`,
+        };
+      default:
+        return {
+          label: "LIVE TUTOR",
+          text: "Change any control. The explanation will update with the numbers and identify the principle that changed—or the invariant that did not.",
+        };
+    }
+  }, [
+    angle,
+    blockMass,
+    frictionCoefficient,
+    frictionEnabled,
+    gravity,
+    parameterFocus,
+    physics.frictionForce,
+    physics.isStatic,
+    physics.staticThreshold,
+    physics.wedgeAcceleration,
+    wedgeMass,
+    weightParallel,
+  ]);
 
   const resetMotion = useCallback(() => {
     setRunning(false);
@@ -326,6 +384,25 @@ export default function WedgeLab() {
                       >
                         <b>mg · {format(blockMass * gravity, 1)} N</b>
                       </i>
+                      {showGuide && submitted && guideStep === 0 && (
+                        <>
+                          <i
+                            className="vector vector-component vector-component-parallel"
+                            style={{ width: parallelArrow }}
+                          >
+                            <b>mg sin θ · {format(weightParallel, 1)} N</b>
+                          </i>
+                          <i
+                            className="vector vector-component vector-component-perpendicular"
+                            style={{
+                              width: perpendicularArrow,
+                              transform: "rotate(90deg)",
+                            }}
+                          >
+                            <b>mg cos θ · {format(weightPerpendicular, 1)} N</b>
+                          </i>
+                        </>
+                      )}
                       <i
                         className="vector vector-normal"
                         style={{
@@ -376,10 +453,10 @@ export default function WedgeLab() {
                 </div>
               </div>
 
-              {showGuide && submitted && !ended && !physics.isStatic && (
-                <div className="coach-overlay">
-                  <div className="coach-nav" role="tablist" aria-label="Simulation guide">
-                    {(["FORCES", "BLOCK MOTION", "SYSTEM"] as const).map(
+              {showGuide && submitted && !ended && (
+                <div className="coach-overlay" aria-live="polite">
+                  <div className="coach-nav" role="tablist" aria-label="Adaptive simulation lesson">
+                    {(["RESOLVE", "FRICTION", "MOTION", "SYSTEM"] as const).map(
                       (label, index) => (
                         <button
                           key={label}
@@ -397,65 +474,118 @@ export default function WedgeLab() {
 
                   {guideStep === 0 && (
                     <div className="coach-body">
-                      <span className="coach-kicker">READ THE FREE-BODY DIAGRAM</span>
-                      <strong>Three forces can act on the block.</strong>
+                      <span className="coach-kicker">01 · RESOLVE WEIGHT, NOT MASS</span>
+                      <strong>Choose axes along and perpendicular to the incline.</strong>
                       <p>
-                        Weight is vertical. The normal is perpendicular to the
-                        incline. Friction, when enabled, points up the plane and
-                        opposes the block&apos;s relative motion.
+                        The mass remains {format(blockMass, 1)} kg. Its weight mg is
+                        vertical; the dashed arrows are components of that one
+                        force, chosen because contact forces use the same axes.
                       </p>
-                      <div className="coach-metrics force-metrics">
-                        <span><i className="metric-orange" />mg {format(blockMass * gravity, 1)} N</span>
-                        <span><i className="metric-blue" />N {format(physics.normalForce, 1)} N</span>
-                        <span><i className="metric-yellow" />f {format(physics.frictionForce, 1)} N</span>
+                      <div className="coach-equation-stack">
+                        <span><i className="metric-orange" />Along plane <b>mg sin θ = {format(weightParallel, 1)} N</b></span>
+                        <span><i className="metric-violet" />Into plane <b>mg cos θ = {format(weightPerpendicular, 1)} N</b></span>
+                        <span><i className="metric-blue" />Contact normal <b>N = {format(physics.normalForce, 1)} N</b></span>
+                      </div>
+                      <div className="jee-trap">
+                        <span>JEE TRAP</span>
+                        <p>
+                          N is {Math.abs(normalDifference) < 0.05 ? "equal to" : normalDifference > 0 ? "greater than" : "less than"} mg cos θ here
+                          {Math.abs(normalDifference) < 0.05
+                            ? " because the system is at rest."
+                            : ` by ${format(Math.abs(normalDifference), 1)} N because the support itself accelerates.`}
+                        </p>
                       </div>
                     </div>
                   )}
 
                   {guideStep === 1 && (
                     <div className="coach-body">
-                      <span className="coach-kicker">GROUND-FRAME KINEMATICS</span>
+                      <span className="coach-kicker">02 · DECIDE: STICK OR SLIDE?</span>
                       <strong>
-                        {physics.isStatic
-                          ? "Static friction keeps the block and wedge at rest."
-                          : "The block does not accelerate along one straight axis."}
+                        {!frictionEnabled
+                          ? "Smooth contact means the block must slide."
+                          : physics.isStatic
+                            ? "Available static friction is sufficient: the system stays at rest."
+                            : "Friction reduces the drive, but cannot prevent sliding."}
                       </strong>
                       <p>
-                        {physics.isStatic
-                          ? "The downslope component of gravity is exactly balanced, so every ground-frame velocity and acceleration remains zero."
-                          : "Its ground motion combines sliding relative to the wedge with the wedge's own leftward translation."}
+                        {!frictionEnabled
+                          ? `The ${format(weightParallel, 1)} N downslope component has no opposing tangential contact force.`
+                          : physics.isStatic
+                            ? `Sticking needs ${format(weightParallel, 1)} N. The contact could supply up to μN = ${format(maximumFriction, 1)} N, so it supplies exactly what is needed—not the maximum.`
+                            : `The selected μ gives f = μN = ${format(physics.frictionForce, 1)} N, leaving ${format(netDownPlaneForce, 1)} N of downslope drive.`}
                       </p>
-                      <div className="coach-metrics kinematics-grid">
-                        <span>a<sub>x</sub><b>{format(physics.blockAcceleration.x)} m/s²</b></span>
-                        <span>a<sub>y</sub><b>{format(physics.blockAcceleration.y)} m/s²</b></span>
-                        <span>|a|<b>{format(blockAccelerationMagnitude)} m/s²</b></span>
-                        <span>|v|<b>{format(blockSpeed)} m/s</b></span>
+                      <div className="regime-comparison">
+                        <span>μ selected <b>{frictionEnabled ? format(frictionCoefficient, 2) : "0.00"}</b></span>
+                        <span>μ needed <b>tan θ = {format(physics.staticThreshold, 2)}</b></span>
+                        <strong className={physics.isStatic ? "regime-static" : "regime-slide"}>
+                          {physics.isStatic ? "STICKS" : "SLIDES"}
+                        </strong>
+                      </div>
+                      <div className="jee-trap">
+                        <span>MODEL NOTE</span>
+                        <p>This lab uses one μ for the limit test and sliding. In exam problems, check whether μₛ and μₖ are given separately.</p>
                       </div>
                     </div>
                   )}
 
                   {guideStep === 2 && (
                     <div className="coach-body">
-                      <span className="coach-kicker">FOLLOW THE WHOLE SYSTEM</span>
+                      <span className="coach-kicker">03 · RELATIVE MOTION ≠ GROUND MOTION</span>
                       <strong>
                         {physics.isStatic
-                          ? "No body moves, so the centre of mass stays fixed."
-                          : "The block moves right, so the wedge must answer left."}
+                          ? "Every velocity and acceleration is zero."
+                          : referenceFrame === "ground"
+                            ? "You are viewing the block from the ground."
+                            : "You are riding with the accelerating wedge."}
                       </strong>
                       <p>
-                        With no external horizontal force, total horizontal
-                        momentum stays zero and the centre of mass cannot drift.
+                        {physics.isStatic
+                          ? "Static friction prevents relative motion, so the wedge has no reason to recoil."
+                          : referenceFrame === "ground"
+                            ? `The block slides down-right relative to the wedge while the wedge moves left. Combining both gives aₓ = ${format(physics.blockAcceleration.x)} and aᵧ = ${format(physics.blockAcceleration.y)} m/s².`
+                            : `In this non-inertial frame the wedge is fixed, but a pseudo-force must be included. The relative acceleration is ${format(physics.relativeAcceleration)} m/s² down the plane.`}
+                      </p>
+                      <div className="coach-metrics kinematics-grid">
+                        <span>a<sub>rel</sub><b>{format(physics.relativeAcceleration)} m/s²</b></span>
+                        <span>a<sub>x,ground</sub><b>{format(physics.blockAcceleration.x)} m/s²</b></span>
+                        <span>a<sub>y,ground</sub><b>{format(physics.blockAcceleration.y)} m/s²</b></span>
+                        <span>|v<sub>ground</sub>|<b>{format(blockSpeed)} m/s</b></span>
+                      </div>
+                      <div className="jee-trap"><span>JEE TRAP</span><p>“Down the plane” describes relative motion. It does not give the block&apos;s ground-frame acceleration direction.</p></div>
+                    </div>
+                  )}
+
+                  {guideStep === 3 && (
+                    <div className="coach-body">
+                      <span className="coach-kicker">04 · ZOOM OUT TO THE SYSTEM</span>
+                      <strong>
+                        {physics.isStatic
+                          ? "Nothing moves, but the conservation laws still hold."
+                          : "Internal forces exchange momentum; they cannot move the horizontal COM."}
+                      </strong>
+                      <p>
+                        The smooth ground supplies no horizontal external force.
+                        Therefore total pₓ remains zero and the horizontal centre
+                        of mass stays fixed, even while both bodies move.
                       </p>
                       <div className="coach-metrics system-metrics">
                         <span>p<sub>x,total</sub><b>{format(world.horizontalMomentum, 5)} kg·m/s</b></span>
                         <span>Δx<sub>COM</sub><b>{format(centreOfMassShift, 5)} m</b></span>
+                        <span>Energy story<b>{frictionEnabled && !physics.isStatic ? `${format(world.dissipatedEnergy, 2)} J → heat` : "mechanical E unchanged"}</b></span>
                       </div>
+                      <div className="jee-trap"><span>JEE TRAP</span><p>Friction is internal for block + wedge. It can dissipate mechanical energy without violating horizontal momentum conservation.</p></div>
                     </div>
                   )}
+
+                  <div className="adaptive-cue">
+                    <span>{adaptiveCue.label}</span>
+                    <p>{adaptiveCue.text}</p>
+                  </div>
                 </div>
               )}
 
-              {physics.isStatic && submitted && (
+              {physics.isStatic && submitted && !showGuide && (
                 <div className="event-marker static-marker" role="status">
                   <span>STATIC FRICTION HOLDS</span>
                   <strong>μ = {format(physics.frictionCoefficient, 2)} ≥ tan θ = {format(physics.staticThreshold, 2)}</strong>
@@ -650,6 +780,7 @@ export default function WedgeLab() {
               unit="kg"
               onChange={(value) => {
                 resetMotion();
+                setParameterFocus("wedge");
                 setWedgeMass(value);
               }}
             />
@@ -663,6 +794,7 @@ export default function WedgeLab() {
               unit="kg"
               onChange={(value) => {
                 resetMotion();
+                setParameterFocus("block");
                 setBlockMass(value);
               }}
             />
@@ -676,6 +808,7 @@ export default function WedgeLab() {
               unit="°"
               onChange={(value) => {
                 resetMotion();
+                setParameterFocus("angle");
                 setAngle(value);
               }}
             />
@@ -686,6 +819,7 @@ export default function WedgeLab() {
                 aria-pressed={frictionEnabled}
                 onClick={() => {
                   resetMotion();
+                  setParameterFocus("friction");
                   setFrictionEnabled((value) => !value);
                 }}
               >
@@ -713,6 +847,7 @@ export default function WedgeLab() {
                   unit=""
                   onChange={(value) => {
                     resetMotion();
+                    setParameterFocus("friction");
                     setFrictionCoefficient(value);
                   }}
                 />
@@ -728,6 +863,7 @@ export default function WedgeLab() {
               unit="m/s²"
               onChange={(value) => {
                 resetMotion();
+                setParameterFocus("gravity");
                 setGravity(value);
               }}
             />
