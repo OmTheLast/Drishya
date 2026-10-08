@@ -185,6 +185,44 @@ p {
   margin-top: 0;
 }
 
+.lab-switcher {
+  position: fixed;
+  z-index: 30;
+  top: 20px;
+  right: 190px;
+  display: flex;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+}
+
+.lab-switcher button {
+  padding: 8px 11px;
+  border: 0;
+  color: #71838d;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.lab-switcher button span {
+  margin-right: 5px;
+  color: var(--orange);
+}
+
+.lab-switcher button.active {
+  color: var(--navy);
+  background: var(--white);
+}
+
+.progress-track .progress-two {
+  width: 28%;
+}
+
 .section-heading h1 {
   margin-bottom: 0;
   font-size: clamp(29px, 3.2vw, 48px);
@@ -1651,6 +1689,220 @@ footer {
   letter-spacing: 0.1em;
 }
 
+/* Lab 02 · movable pulley */
+.pulley-stage {
+  --ground-y: auto;
+  height: 440px;
+  overflow: hidden;
+}
+
+.pulley-world {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+}
+
+.pulley-ceiling {
+  stroke: var(--navy);
+  stroke-width: 8;
+  stroke-linecap: square;
+}
+
+.pulley-rope {
+  fill: none;
+  stroke: #4d5f69;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pulley-wheel {
+  fill: #edf1f2;
+  stroke: var(--navy);
+  stroke-width: 6;
+}
+
+.pulley-wheel.moving {
+  fill: #fff5dc;
+  stroke: #d49a22;
+}
+
+.pulley-hub {
+  fill: var(--orange);
+}
+
+.pulley-link {
+  stroke: var(--navy);
+  stroke-width: 5;
+}
+
+.pulley-mass {
+  stroke: var(--navy);
+  stroke-width: 3;
+}
+
+.mass-one { fill: var(--orange); }
+.mass-two { fill: var(--blue); }
+
+.pulley-mass-symbol,
+.pulley-mass-value,
+.apparatus-label,
+.force-text,
+.constraint-stamp text {
+  font-family: var(--font-geist-mono), monospace;
+}
+
+.pulley-mass-symbol {
+  fill: var(--navy);
+  font-size: 21px;
+  font-style: italic;
+  font-weight: 900;
+  text-anchor: middle;
+}
+
+.pulley-mass-value {
+  fill: rgba(7, 25, 39, 0.72);
+  font-size: 10px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.apparatus-label {
+  fill: #71838d;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.force-line {
+  fill: none;
+  stroke-width: 4;
+}
+
+.weight-line { stroke: var(--orange); }
+.tension-line { stroke: var(--blue); }
+.velocity-line { stroke: var(--green); }
+
+.force-text {
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.weight-text { fill: var(--orange); }
+.tension-text { fill: var(--blue); }
+
+.constraint-stamp rect {
+  fill: rgba(255, 255, 255, 0.88);
+  stroke: #d7d5ce;
+}
+
+.constraint-stamp text {
+  fill: var(--navy);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.pulley-integrity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.pulley-integrity i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(45, 156, 112, 0.12);
+}
+
+.pulley-coach {
+  top: 54px;
+  width: min(425px, calc(100% - 40px));
+}
+
+.constraint-proof {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.constraint-proof span {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  color: #81949f;
+  background: rgba(255, 255, 255, 0.06);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 7px;
+}
+
+.constraint-proof b {
+  color: var(--white);
+  font-size: 8px;
+}
+
+.pulley-predictions {
+  gap: 7px;
+}
+
+.pulley-predictions button {
+  min-height: 57px;
+}
+
+.pulley-predictions .direction-icon {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.balance-card {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 4px;
+  padding: 12px;
+  border: 1px solid #e7c36e;
+  background: #fff7e3;
+}
+
+.balance-card span {
+  color: #9b751d;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.balance-card strong {
+  font-size: 12px;
+}
+
+.balance-card small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.pulley-insight .insight-content {
+  grid-template-columns: 1.25fr 1fr 1fr 1.05fr;
+}
+
+.pulley-insight .challenge-answer {
+  align-content: center;
+}
+
+.pulley-insight .challenge-answer small {
+  color: #aebbc3;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 @media (max-width: 1050px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -1671,9 +1923,26 @@ footer {
   .measurement strong {
     font-size: 14px;
   }
+
+  .pulley-insight .insight-content {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 700px) {
+  .lab-switcher {
+    top: auto;
+    right: 50%;
+    bottom: 12px;
+    transform: translateX(50%);
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(7, 25, 39, 0.94);
+  }
+
+  .lab-switcher button {
+    padding: 9px 12px;
+  }
+
   .topbar {
     grid-template-columns: 1fr auto;
   }
@@ -1703,6 +1972,10 @@ footer {
   .stage {
     --ground-y: 410px;
     --world-origin-x: 40px;
+    height: 470px;
+  }
+
+  .pulley-stage {
     height: 470px;
   }
 
@@ -1745,6 +2018,18 @@ footer {
     top: 62px;
     right: 12px;
     width: calc(100% - 24px);
+  }
+
+  .pulley-coach {
+    top: 54px;
+  }
+
+  .constraint-proof {
+    grid-template-columns: 1fr;
+  }
+
+  .constraint-proof span {
+    grid-template-columns: 1fr auto;
   }
 
   .coach-body {
@@ -1791,6 +2076,10 @@ footer {
 
   .control-column {
     display: block;
+  }
+
+  .pulley-insight .insight-content {
+    grid-template-columns: 1fr;
   }
 
   .prediction-panel {
