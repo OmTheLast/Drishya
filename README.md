@@ -1,5 +1,7 @@
 <h1 align="center">Drishya Physics</h1>
 
+[Portfolio case study](https://ompatnaik.com/projects/drishya/) · [Live mechanics lab](https://ompatnaik.com/Drishya/)
+
 **Change a mechanics experiment, compare reference frames, and connect the motion to its equations.**
 
 [Demo or published artifacts](https://ompatnaik.com/Drishya/)
